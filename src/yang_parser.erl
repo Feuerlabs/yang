@@ -561,10 +561,12 @@ fold_stmt_list(Key,Ln,Arg,Fun,Acc,Acc0,Scan,I) ->
 	    end;
 	eof ->
 	    {error,{Ln,"statement ~s not terminated", [Key]}};
-	{Token={word,Ln1,_}, _Scan1} ->
-	    {error,{Ln1,"syntax error near ~w",[Token]}};
-	{Token={string,Ln1,_}, _Scan1} ->
-	    {error,{Ln1,"syntax error near ~w",[Token]}};
+	{{word,Ln1,Word}, _Scan1} ->
+	    {error,{Ln1,"syntax error near ~s",[Word]}};
+	{{string,Ln1,String}, _Scan1} ->
+	    {error,{Ln1,"syntax error near ~s",[String]}};
+	{{T,Ln1}, _Scan1} when is_atom(T) ->
+	    {error,{Ln1,"token ~w not expected",[T]}};
 	Error ->
 	    Error
     end.
