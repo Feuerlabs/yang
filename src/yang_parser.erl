@@ -53,10 +53,10 @@
 	      imports = orddict:new(),
 	      data = []}).
 
-%-define(debug, true).
+%%-define(debug, true).
 
 -ifdef(debug).
--define(dbg(F,A), io:format((F),(A))).
+-define(dbg(F,A), lager:debug((F),(A))).
 -else.
 -define(dbg(F,A), ok).
 -endif.
@@ -95,8 +95,10 @@ deep_parse(File, Opts) ->
     deep_parse(File, Opts, []).
 
 deep_parse(File, Opts, Parents) ->
+    ?dbg("file ~p, opts ~p, ps ~p", [File, Opts, Parents]),
     case parse(File, Opts) of
 	{ok, Yang} ->
+	    %%?dbg("yang ~p",[Yang]),
 	    expand(Yang, set_cur(filename:absname(
 				   filename:dirname(File)), Opts), Parents);
 	{error, _} = E ->
@@ -124,6 +126,8 @@ expand([{Type,L,M,Data}], Opts, Ps) when Type==module; Type==submodule ->
     end.
 
 expand_module(Type, Data, M, Opts, Ps) ->
+    ?dbg("type ~p, data ~p, m ~p, opts ~p, ps ~p",
+		[Type, Data, M, Opts, Ps]),
     OwnPfx = case Type of
 		 module ->
 		     {_, _, Pfx, _} = lists:keyfind(prefix,1,Data),
@@ -149,6 +153,7 @@ expand_module(Type, Data, M, Opts, Ps) ->
 imports(Data, Opts, Ps) ->
     lists:foldl(
       fun({import,L,M,IOpts}, Dict) ->
+	      ?dbg("m ~p",[M]),
 	      try import_(M, IOpts, Opts, L, Ps, Dict)
 	      catch
 		  {error, E} ->
@@ -159,18 +164,22 @@ imports(Data, Opts, Ps) ->
       end, orddict:new(), Data).
 
 import_(M, IOpts, Opts, L, Ps, Dict) ->
+    ?dbg("m ~p",[M]),
     {Yi, Types} = parse_expand(<<M/binary, ".yang">>, L, Opts, Ps),
     Prefix = case lists:keyfind(prefix,1,IOpts) of
-		 {prefix,_,P,_} -> P;
+		 {prefix,_,Pfx,_} ->
+		     Pfx;
 		 false ->
 		     %% The prefix substatement is mandatory in modules
-		     {_, _, P1, _} = lists:keyfind(prefix,1,Yi),
-		     P1
+		     {_, _, Pfx, _} = lists:keyfind(prefix,1,Yi),
+		     Pfx
 	     end,
-    orddict:store(Prefix, #mod{module = M,
-			       prefix = Prefix,
-			       data = Yi,
-			       typedefs = Types}, Dict).
+    orddict:store(
+      {prefix,M}, Prefix,
+      orddict:store(Prefix, #mod{module = M,
+				 prefix = Prefix,
+				 data = Yi,
+				 typedefs = Types}, Dict)).
 
 
 parse_expand(F, L, Opts, Ps) ->
@@ -189,6 +198,7 @@ submodules(Data, Pfx, M, Opts, Ps) ->
 		      true ->
 			  error({include_loop, {L, [SubM|Visited]}});
 		      false ->
+			  ?dbg("m ~p, visited ~p",[M, Visited]),
 			  Data1 = include_submodule(SubM, IOpts, Opts,
 						    [{Pfx,M,Opts}|Ps]),
 			  {Data1, [SubM|Visited]}
@@ -199,6 +209,7 @@ submodules(Data, Pfx, M, Opts, Ps) ->
     lists:flatten(Res).
 
 include_submodule(M, IOpts, Opts, Ps) ->
+    ?dbg("m ~p, iopts ~p, opts ~p, ps ~p", [M, IOpts, Opts, Ps]),
     File = case lists:keyfind(revision_date, 1, IOpts) of
 	       {'revision_date', _, D, _} ->
 		   <<M/binary, "@", D/binary, ".yang">>;
@@ -206,8 +217,8 @@ include_submodule(M, IOpts, Opts, Ps) ->
 		   <<M/binary, ".yang">>
 	   end,
     case deep_parse(File, Opts, Ps) of
-	{ok, [{submodule, _, _, Data}]} ->
-	    Data;
+        {ok, [{submodule,_,_,Data}]} ->
+            Data;
 	Other ->
 	    error({include_error, [M, IOpts, Other]})
     end.
@@ -240,10 +251,11 @@ include_submodule(M, IOpts, Opts, Ps) ->
 %% expand_uses([], _, _, _, _) ->
 %%     [].
 
-expand_elems_([{uses,L,U,Ou}|T], #mod{loop_count = Cnt,
-				      data = Yang,
-				      prefix = OwnPfx,
-				      imports = Imports} = ModR, Ps) ->
+expand_elems_([{uses,L,U,Ou} = _Elem|T], #mod{loop_count = Cnt,
+					     data = Yang,
+					     prefix = OwnPfx,
+					     imports = Imports} = ModR, Ps) ->
+    %%?dbg("Elem ~p,~nMod ~p", [_Elem, ModR]),
     if Cnt > 1000 -> throw({circular_dependency, [uses, L, U]});
        true -> ok
     end,
@@ -261,27 +273,31 @@ expand_elems_([{uses,L,U,Ou}|T], #mod{loop_count = Cnt,
 		    {ok, #mod{data = Yi} = OtherModR} ->
 			{find_grouping(UName, Pfx, Yi, L, []), OtherModR};
 		    error ->
+			?dbg("Elem ~p,~nMod ~p", [Elem, ModR]),
+			?dbg("Pfx ~p,~n Imports ~p", [Pfx, Imports]),
 			throw({unknown_prefix, [uses, L, U]})
 		end
 	end,
     FoundExp = expand_elems_(Found, InModR#mod{loop_count = Cnt+1}, Ps),
     refine(augment(FoundExp, Ou), Ou) ++
 	expand_elems_(T, ModR#mod{loop_count = 0}, Ps);
-expand_elems_([{type,L,Type,[]} = Elem|T], ModR, Ps) ->
-    case builtin_type(Type) of
-	true ->
-	    [Elem|expand_elems_(T, ModR, Ps)];
+expand_elems_([{type,L,Type,I} = Elem|T], ModR, Ps) ->
+    %%?dbg("Elem ~p,~nMod ~p", [Elem, ModR]),
+    case builtin_type(Type, Elem) of
 	false ->
-	    ?dbg("expand_type(~p, ... ~p)~n", [Type, ModR#mod.typedefs]),
+	    %%?dbg("expand_type(~p, ... ~p)~n", [Type, ModR#mod.typedefs]),
 	    {NewType,Def} = expand_type(Type, L, ModR),
 	    [{type,L,NewType,
-	      [{{<<"$yang">>,<<"origtype">>},L,Type,[]}|Def]}|
-	     expand_elems_(T, ModR, Ps)]
+	      [{{<<"$yang">>,<<"origtype">>},L,Type,I}|Def]}|
+	     expand_elems_(T, ModR, Ps)];
+	NewElem ->
+	    [NewElem|expand_elems_(T, ModR, Ps)]
     end;
 expand_elems_([{{<<"$yang">>,_}, _, _, _} = IntStmt |T], ModR, Ps) ->
     [IntStmt | expand_elems_(T, ModR, Ps)];
-expand_elems_([{{Pfx,Extension}, L, Arg, Data}|T],
+expand_elems_([{{Pfx,Extension}, L, Arg, Data} = _Elem|T],
 	      #mod{module = Mod} = ModR, Ps) ->
+    %% ?dbg("Elem ~p,~nMod ~p", [Elem, Mod]),
     Mp = case find_prefix(Pfx, ModR) of
 	     false ->
 		 if Pfx == Mod ->
@@ -289,16 +305,19 @@ expand_elems_([{{Pfx,Extension}, L, Arg, Data}|T],
 			 %% We have to guess, although we really should know.
 			 Mod;
 		    true ->
+			 ?dbg("Elem ~p,~nMod ~p,~n Ps ~p",  [_Elem, ModR, Ps]),
 			 throw({unknown_prefix, [extension, L, Pfx, Extension]})
 		 end;
-	     #mod{module = Mod1} -> Mod1
+	     #mod{module = M} ->
+		 M
 	 end,
     [{{Mp,Extension},L,Arg, expand_elems_(Data, ModR, Ps)}
      | expand_elems_(T, ModR, Ps)];
 %% expand_elems_([{{ext,_,_},_,_,_} = Ext|T], ModR) ->
 %%     %% already expanded
 %%     [Ext| expand_elems_(T, ModR)];
-expand_elems_([{Elem,L,Name,Data}|T], ModR, Ps) ->
+expand_elems_([{Elem,L,Name,Data} = _Stmt|T], ModR, Ps) ->
+    %%?dbg("Stmt ~p,~nMod ~p", [Stmt, ModR]),
     [{Elem,L,Name,fix_expanded_(expand_elems_(Data, ModR, Ps))}
      | expand_elems_(T, ModR, Ps)];
 expand_elems_([], _, _) ->
@@ -309,32 +328,79 @@ find_prefix(Pfx, #mod{prefix = Pfx} = ModR) ->
 find_prefix(Pfx, #mod{imports = Imports}) ->
     case orddict:find(Pfx, Imports) of
 	error ->
-	    false;
+	    case orddict:find({prefix,Pfx}, Imports) of
+		error -> false;
+		{ok, ActualPrefix} ->
+		    %% The "prefix" was in fact a module name (already expanded)
+		    orddict:fetch(ActualPrefix, Imports)
+	    end;
 	{ok, #mod{} = ModI} ->
 	    ModI
     end.
 
 
-builtin_type(<<"binary"             >>) -> true;
-builtin_type(<<"bits"               >>) -> true;
-builtin_type(<<"boolean"            >>) -> true;
-builtin_type(<<"decimal64"          >>) -> true;
-builtin_type(<<"empty"              >>) -> true;
-builtin_type(<<"enumeration"        >>) -> true;
-builtin_type(<<"identityref"        >>) -> true;
-builtin_type(<<"instance-identifier">>) -> true;
-builtin_type(<<"int8"               >>) -> true;
-builtin_type(<<"int16"              >>) -> true;
-builtin_type(<<"int32"              >>) -> true;
-builtin_type(<<"int64"              >>) -> true;
-builtin_type(<<"leafref"            >>) -> true;
-builtin_type(<<"string"             >>) -> true;
-builtin_type(<<"uint8"              >>) -> true;
-builtin_type(<<"uint16"             >>) -> true;
-builtin_type(<<"uint32"             >>) -> true;
-builtin_type(<<"uint64"             >>) -> true;
-builtin_type(<<"union"              >>) -> true;
-builtin_type(_) -> false.
+builtin_type(<<"binary"             >>, E) -> E;
+builtin_type(<<"bits"               >>, E) -> E;
+builtin_type(<<"boolean"            >>, E) -> E;
+builtin_type(<<"decimal64"          >>, E) -> E;
+builtin_type(<<"empty"              >>, E) -> E;
+builtin_type(<<"enumeration"        >>, E) -> expand_enum(E);
+builtin_type(<<"identityref"        >>, E) -> E;
+builtin_type(<<"instance-identifier">>, E) -> E;
+builtin_type(<<"int8"               >>, E) -> E;
+builtin_type(<<"int16"              >>, E) -> E;
+builtin_type(<<"int32"              >>, E) -> E;
+builtin_type(<<"int64"              >>, E) -> E;
+builtin_type(<<"leafref"            >>, E) -> E;
+builtin_type(<<"string"             >>, E) -> E;
+builtin_type(<<"uint8"              >>, E) -> E;
+builtin_type(<<"uint16"             >>, E) -> E;
+builtin_type(<<"uint32"             >>, E) -> E;
+builtin_type(<<"uint64"             >>, E) -> E;
+builtin_type(<<"union"              >>, E) -> E;
+builtin_type(_, _) -> false.
+
+expand_enum({type, L, <<"enumeration">>, En} = _E) ->
+    {NewEn,_} =
+	lists:mapfoldl(
+	  fun({enum,L1,Key,I} = E, {Next, Max, Hist}) ->
+		  case lists:keyfind(value, 1, I) of
+		      {value,_,V,_} ->
+			  case lists:member(V, Hist) of
+			      true -> throw({value_conflict, [enum,L1,Key]});
+			      false ->
+				  {NewI, NewMax} =
+				      enum_value(Max, to_int(V)+1, L1, Key),
+				  {E, {NewI, NewMax, [V|Hist]}}
+			  end;
+		      false when Max ->
+			  throw({value_required, [enum,L1,Key]});
+		      false ->
+			  {NewI, NewMax} = enum_value(Max, Next+1, L1, Key),
+			  {{enum, L1, Key,
+			    [{value,L1,list_to_binary(
+					 integer_to_list(Next)),[]}|I]},
+			   {NewI, NewMax,
+			    [list_to_binary(integer_to_list(NewI))|Hist]}}
+		  end;
+	     (E, Last) ->
+		  {E, Last}
+	  end, {0,false,[]}, En),
+    {type, L, <<"enumeration">>, NewEn}.
+
+to_int(B) when is_binary(B) ->
+    list_to_integer(binary_to_list(B));
+to_int(I) when is_integer(I) ->
+    I.
+
+enum_value(_Prev, 2147483647 = I, _,_) ->
+    {I, true};
+enum_value(_, I, L, Key) when -2147483648 > I; I > 2147483647 ->
+    throw({illegal_value, [enum, L, Key]});
+enum_value(Prev, I, _, _) ->
+    {I, Prev}.
+
+
 
 expand_type(Type, L, #mod{module = M,
 			  prefix = OwnPfx,

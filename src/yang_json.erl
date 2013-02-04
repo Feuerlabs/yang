@@ -64,18 +64,23 @@ to_json_type(X, {type,_,<<"uint", _/binary>>,_}) when is_integer(X), X >= 0 ->
     X;
 to_json_type(false, {type,_,<<"boolean">>,_}) -> false;
 to_json_type(true, {type,_,<<"boolean">>,_}) -> true;
-to_json_type(X, {type,_,<<"enumeration">>, En} = T) ->
-    case [lists:keyfind(value,1,I1) || {enum,_,E1,I1} <- En,
-				       E1 == X] of
-	[{value,_,V,_}] when is_binary(V) ->
-	    %% The enum value is specified as an integer, but represented by
-	    %% yang_parser as a binary.
-	    list_to_integer(binary_to_list(V));
-	[{value,_,V,_}] when is_integer(V) ->
-	    %% Just in case the above should ever change...
-	    V;
-	[] ->
-	    error({type_error, [X, T]})
+to_json_type(X0, {type,_,<<"enumeration">>, En} = T) ->
+    %% We always return the key (binary) - not the value (integer).
+    %% This seems to be in keeping with how NETCONF does it.
+    X = if is_integer(X0) -> list_to_binary(integer_to_list(X0));
+	   is_binary(X0)  -> X0;
+	   is_list(X0) -> list_to_binary(X0)
+	end,
+    case find_enum(En, X) of
+	[] -> error({type_error, [X0, T]});
+	[{Key, _}] ->
+	    Key;
+	[{K1, V1}, {K2, V2}] ->
+	    %% Either V1 or V2 must be equal to X, or it's an error
+	    if V1 == X -> K1;
+	       V2 == X -> K2;
+	       true -> error({type_error, [X0, T]})
+	    end
     end;
 to_json_type(X, {type, _, <<"union">>, Ts} = Type) ->
     to_json_type_union(Ts, X, Type);
@@ -947,6 +952,25 @@ to_atom(B) when is_binary(B) ->
 to_atom(A) when is_atom(A) ->
     A.
 
+%% duplicated from yang.erl
+find_enum([{enum, _, Key, I}|T], X) ->
+    V = get_en_value(I),
+    if X == V ->
+	    [{Key, V}];
+       X == Key ->
+	    [{Key, V}|find_enum(T, X)];
+       true ->
+	    find_enum(T, X)
+    end;
+find_enum([_|T], X) ->
+    find_enum(T, X);
+find_enum([], _) ->
+    [].
+
+get_en_value(I) ->
+    {value, _, V, _} = lists:keyfind(value, 1, I),
+    V.
+
 
 
 %% ===================================================================
@@ -1022,6 +1046,81 @@ testdata(File, Fn) ->
 		File, [{open_hook, yang:bin_hook([{File, Fn}])}]),
     Y.
 
+enum_test() ->
+    File = "e1.yang",
+    {ok, [{module,_,<<"e1">>, Y}]} =
+	yang_parser:deep_parse(
+	  File,
+	  [{open_hook, yang:bin_hook([{File, fun e1/0}])}]),
+    [{leaf,_,<<"l">>,I}] = [E || {leaf,_,<<"l">>,_} = E <- Y],
+    Type = lists:keyfind(type, 1, I),
+    {true, <<"zero">>} = yang:check_type(<<"0">>, Type),
+    {true, <<"zero">>} = yang:check_type(0, Type),
+    {true, <<"zero">>} = yang:check_type("0", Type),
+    {true, <<"then">>} = yang:check_type(<<"3">>, Type),
+    {true, <<"then">>} = yang:check_type(<<"then">>, Type),
+    {true, <<"3">>} = yang:check_type(<<"4">>, Type),
+    <<"zero">> = yang_json:to_json_type(<<"0">>, Type),
+    <<"zero">> = yang_json:to_json_type(0, Type),
+    <<"zero">> = yang_json:to_json_type("0", Type),
+    <<"zero">> = yang_json:to_json_type(<<"zero">>, Type),
+    <<"zero">> = yang_json:to_json_type("zero", Type),
+    ok.
+
+enum_type_test() ->
+    Type = {type,186,<<"enumeration">>,
+	    [{{<<"$yang">>,<<"origtype">>},186,<<"exo:status-code">>,[]},
+	     {enum,41,<<"accepted">>,
+	      [{description,42,
+		<<"Operation has been accepted and is in progress.">>,[]},
+	       {value,43,<<"0">>,[]}]},
+	     {enum,46,<<"complete">>,
+	      [{description,47,
+		<<"The operation has completed successfully.">>,[]},
+	       {value,48,<<"1">>,[]}]},
+	     {enum,51,<<"time-out">>,
+	      [{description,52,<<"Operation has timed out.">>,[]},
+	       {value,53,<<"2">>,[]}]},
+	     {enum,56,<<"device-connected">>,
+	      [{description,57,
+		<<"A connection has been established...">>,[]},
+	       {value,60,<<"3">>,[]}]},
+	     {enum,63,<<"device-unknown">>,
+	      [{description,64,
+		<<"The device-id provided with the operation is...">>,[]},
+	       {value,66,<<"4">>,[]}]},
+	     {enum,70,<<"device-error">>,
+	      [{description,71,
+		<<"The device encountered an error when ...">>,[]},
+	       {value,74,<<"5">>,[]}]},
+	     {enum,77,<<"format-error">>,
+	      [{description,78,<<"The RPC had an incorrect element ...">>,
+		[]},
+	       {value,79,<<"6">>,[]}]},
+	     {enum,82,<<"value-error">>,
+	      [{description,83,<<"The RPC had illegal values in ...">>,[]},
+	       {value,85,<<"7">>,[]}]}]},
+    {true, <<"value-error">>} = yang:check_type(7, Type),
+    {true, <<"value-error">>} = yang:check_type("7", Type),
+    {true, <<"value-error">>} = yang:check_type(<<"7">>, Type),
+    ok.
+
+e1() ->
+    <<
+"module e1 {
+  namespace \"http://feuerlabs.com/test\";
+  prefix e1;
+
+  leaf l {
+    type enumeration {
+      enum zero;
+      enum one;
+      enum then { value 3; }
+      enum 3;
+    }
+  }
+}"
+>>.
 
 y0() ->
     <<
