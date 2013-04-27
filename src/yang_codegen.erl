@@ -36,6 +36,8 @@ module_([{module,_,M,Y}] = Yang, Src, ErlMod, Opts) ->
 				  {grouping,1},
 				  {rpcs, 0},
 				  {rpc, 1},
+				  {notifications, 0},
+				  {notification, 1},
 				  {yang, 0},
 				  {src, 0}]},
 	     module(M),
@@ -47,6 +49,8 @@ module_([{module,_,M,Y}] = Yang, Src, ErlMod, Opts) ->
 	     grouping_1(Y),
 	     rpcs(Y),
 	     rpc_1(Y),
+	     notifications(Y),
+	     notification_1(Y),
 	     yang(Yang),
 	     src(Src),
 	     {eof,1}],
@@ -138,6 +142,22 @@ rpc_1(Y) ->
       [fun({'$var', Name}) ->
 	       {'$var', RPC}
        end || {rpc,_,Name,_} = RPC <- Y],
+     fun(_) -> error end).
+
+notifications(Y) ->
+    Names = [Name || {notification,_,Name,_} <- Y],
+    codegen:gen_function(
+      notifications,
+      fun() ->
+	      {'$var', Names}
+      end).
+
+notification_1(Y) ->
+    codegen:gen_function_alt(
+      notification,
+      [fun({'$var', Name}) ->
+	       {'$var', N}
+       end || {notification,_,Name,_} = N <- Y],
      fun(_) -> error end).
 
 yang(_Y) ->
