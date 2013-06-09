@@ -53,13 +53,14 @@
 	      imports = orddict:new(),
 	      data = []}).
 
+%%-include_lib("lager/include/log.hrl").
 %%-define(debug, true).
 
--ifdef(debug).
--define(dbg(F,A), lager:debug((F),(A))).
--else.
--define(dbg(F,A), ok).
--endif.
+%% -ifdef(debug).
+%% -define(debug(F,A), io:fwrite("~p: " ++ F, [?LINE|A])).
+%% -else.
+-define(debug(F,A), ok).
+%% -endif.
 
 -type option() :: {chunk_size, pos_integer()} | {atom(),any()}.
 
@@ -81,6 +82,7 @@ parse(File) ->
 		   {error,any()}.
 
 parse(File,Opts) ->
+    ?debug("parse(~p, ~p)~n", [File, Opts]),
     Fun = fun(Key,Ln,Arg,Acc0,Acc) ->
 		  Stmts = reverse(Acc0),
 		  Element = {Key,Ln,Arg,Stmts},
@@ -95,23 +97,27 @@ deep_parse(File, Opts) ->
     deep_parse(File, Opts, []).
 
 deep_parse(File, Opts, Parents) ->
-    ?dbg("file ~p, opts ~p, ps ~p", [File, Opts, Parents]),
+    ?debug("deep_parse: file ~p, opts ~p, ps ~p", [File, Opts, Parents]),
     case parse(File, Opts) of
 	{ok, Yang} ->
-	    %%?dbg("yang ~p",[Yang]),
-	    expand(Yang, set_cur(filename:absname(
-				   filename:dirname(File)), Opts), Parents);
+	    %%?debug("yang ~p",[Yang]),
+	    expand(Yang, set_cur_file(File, Opts), Parents);
 	{error, _} = E ->
 	    E
     end.
 
+set_cur_file(File, Opts) ->
+    set_cur(filename:absname(
+	      filename:dirname(File)), Opts).
+
 set_cur(D, Opts) ->
-    case lists:keyfind(cur, 1, Opts) of
-	{_, _} ->
-	    Opts;
-	false ->
-	    [{cur, D}|Opts]
-    end.
+    lists:keystore(cur, 1, Opts, {cur, D}).
+    %% case lists:keyfind(cur, 1, Opts) of
+    %% 	{_, _} ->
+    %% 	    Opts;
+    %% 	false ->
+    %% 	    [{cur, D}|Opts]
+    %% end.
 
 expand([{Type,L,M,Data}], Opts, Ps) when Type==module; Type==submodule ->
     try begin
@@ -126,7 +132,7 @@ expand([{Type,L,M,Data}], Opts, Ps) when Type==module; Type==submodule ->
     end.
 
 expand_module(Type, Data, M, Opts, Ps) ->
-    ?dbg("type ~p, data ~p, m ~p, opts ~p, ps ~p",
+    ?debug("type ~p, data ~p, m ~p, opts ~p, ps ~p",
 		[Type, Data, M, Opts, Ps]),
     OwnPfx = case Type of
 		 module ->
@@ -153,7 +159,7 @@ expand_module(Type, Data, M, Opts, Ps) ->
 imports(Data, Opts, Ps) ->
     lists:foldl(
       fun({import,L,M,IOpts}, Dict) ->
-	      ?dbg("m ~p",[M]),
+	      ?debug("m ~p",[M]),
 	      try import_(M, IOpts, Opts, L, Ps, Dict)
 	      catch
 		  {error, E} ->
@@ -164,7 +170,7 @@ imports(Data, Opts, Ps) ->
       end, orddict:new(), Data).
 
 import_(M, IOpts, Opts, L, Ps, Dict) ->
-    ?dbg("m ~p",[M]),
+    ?debug("m ~p",[M]),
     {Yi, Types} = parse_expand(<<M/binary, ".yang">>, L, Opts, Ps),
     Prefix = case lists:keyfind(prefix,1,IOpts) of
 		 {prefix,_,Pfx,_} ->
@@ -185,7 +191,8 @@ import_(M, IOpts, Opts, L, Ps, Dict) ->
 parse_expand(F, L, Opts, Ps) ->
     case parse(F, Opts) of
 	{ok, [{Type, _, Name, Data}]} when Type==module; Type==submodule ->
-	    expand_module(Type, Data, Name, Opts, Ps);
+	    expand_module(Type, Data, Name,
+			  set_cur_file(F, Opts), Ps);
 	{error, Error} ->
 	    error({Error, [import, L, F]})
     end.
@@ -198,7 +205,7 @@ submodules(Data, Pfx, M, Opts, Ps) ->
 		      true ->
 			  error({include_loop, {L, [SubM|Visited]}});
 		      false ->
-			  ?dbg("m ~p, visited ~p",[M, Visited]),
+			  ?debug("m ~p, visited ~p",[M, Visited]),
 			  Data1 = include_submodule(SubM, IOpts, Opts,
 						    [{Pfx,M,Opts}|Ps]),
 			  {Data1, [SubM|Visited]}
@@ -209,7 +216,7 @@ submodules(Data, Pfx, M, Opts, Ps) ->
     lists:flatten(Res).
 
 include_submodule(M, IOpts, Opts, Ps) ->
-    ?dbg("m ~p, iopts ~p, opts ~p, ps ~p", [M, IOpts, Opts, Ps]),
+    ?debug("m ~p, iopts ~p, opts ~p, ps ~p", [M, IOpts, Opts, Ps]),
     File = case lists:keyfind(revision_date, 1, IOpts) of
 	       {'revision_date', _, D, _} ->
 		   <<M/binary, "@", D/binary, ".yang">>;
@@ -255,7 +262,7 @@ expand_elems_([{uses,L,U,Ou} = _Elem|T], #mod{loop_count = Cnt,
 					     data = Yang,
 					     prefix = OwnPfx,
 					     imports = Imports} = ModR, Ps) ->
-    %%?dbg("Elem ~p,~nMod ~p", [_Elem, ModR]),
+    %%?debug("Elem ~p,~nMod ~p", [_Elem, ModR]),
     if Cnt > 1000 -> throw({circular_dependency, [uses, L, U]});
        true -> ok
     end,
@@ -273,8 +280,8 @@ expand_elems_([{uses,L,U,Ou} = _Elem|T], #mod{loop_count = Cnt,
 		    {ok, #mod{data = Yi} = OtherModR} ->
 			{find_grouping(UName, Pfx, Yi, L, []), OtherModR};
 		    error ->
-			?dbg("Elem ~p,~nMod ~p", [Elem, ModR]),
-			?dbg("Pfx ~p,~n Imports ~p", [Pfx, Imports]),
+			?debug("Elem ~p,~nMod ~p", [_Elem, ModR]),
+			?debug("Pfx ~p,~n Imports ~p", [Pfx, Imports]),
 			throw({unknown_prefix, [uses, L, U]})
 		end
 	end,
@@ -282,10 +289,10 @@ expand_elems_([{uses,L,U,Ou} = _Elem|T], #mod{loop_count = Cnt,
     refine(augment(FoundExp, Ou), Ou) ++
 	expand_elems_(T, ModR#mod{loop_count = 0}, Ps);
 expand_elems_([{type,L,Type,I} = Elem|T], ModR, Ps) ->
-    %%?dbg("Elem ~p,~nMod ~p", [Elem, ModR]),
+    %%?debug("Elem ~p,~nMod ~p", [Elem, ModR]),
     case builtin_type(Type, Elem) of
 	false ->
-	    %%?dbg("expand_type(~p, ... ~p)~n", [Type, ModR#mod.typedefs]),
+	    %%?debug("expand_type(~p, ... ~p)~n", [Type, ModR#mod.typedefs]),
 	    {NewType,Def} = expand_type(Type, L, ModR),
 	    [{type,L,NewType,
 	      [{{<<"$yang">>,<<"origtype">>},L,Type,I}|Def]}|
@@ -297,7 +304,7 @@ expand_elems_([{{<<"$yang">>,_}, _, _, _} = IntStmt |T], ModR, Ps) ->
     [IntStmt | expand_elems_(T, ModR, Ps)];
 expand_elems_([{{Pfx,Extension}, L, Arg, Data} = _Elem|T],
 	      #mod{module = Mod} = ModR, Ps) ->
-    %% ?dbg("Elem ~p,~nMod ~p", [Elem, Mod]),
+    %% ?debug("Elem ~p,~nMod ~p", [Elem, Mod]),
     Mp = case find_prefix(Pfx, ModR) of
 	     false ->
 		 if Pfx == Mod ->
@@ -305,7 +312,7 @@ expand_elems_([{{Pfx,Extension}, L, Arg, Data} = _Elem|T],
 			 %% We have to guess, although we really should know.
 			 Mod;
 		    true ->
-			 ?dbg("Elem ~p,~nMod ~p,~n Ps ~p",  [_Elem, ModR, Ps]),
+			 ?debug("Elem ~p,~nMod ~p,~n Ps ~p",  [_Elem, ModR, Ps]),
 			 throw({unknown_prefix, [extension, L, Pfx, Extension]})
 		 end;
 	     #mod{module = M} ->
@@ -317,7 +324,7 @@ expand_elems_([{{Pfx,Extension}, L, Arg, Data} = _Elem|T],
 %%     %% already expanded
 %%     [Ext| expand_elems_(T, ModR)];
 expand_elems_([{Elem,L,Name,Data} = _Stmt|T], ModR, Ps) ->
-    %%?dbg("Stmt ~p,~nMod ~p", [Stmt, ModR]),
+    %%?debug("Stmt ~p,~nMod ~p", [Stmt, ModR]),
     [{Elem,L,Name,fix_expanded_(expand_elems_(Data, ModR, Ps))}
      | expand_elems_(T, ModR, Ps)];
 expand_elems_([], _, _) ->

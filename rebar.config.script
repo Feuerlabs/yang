@@ -8,11 +8,12 @@
 %%
 case os:getenv("EXODEV_COMP") of
     false ->
-        CONFIG;
-
+	case os:getenv("REBAR_DEPS") of
+	    false ->
+		CONFIG;
+	    Dir ->
+		lists:keystore(deps_dir, 1, CONFIG, {deps_dir, Dir})
+	end;
     _ ->
-        case lists:keytake(deps, 1, CONFIG) of
-            { value, _, Remainder } -> Remainder;
-            _ -> CONFIG
-        end
+        lists:keydelete(deps, 1, CONFIG)
 end.

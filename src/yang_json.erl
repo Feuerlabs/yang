@@ -68,19 +68,19 @@ to_json_type(X0, {type,_,<<"enumeration">>, En} = T) ->
     %% We always return the key (binary) - not the value (integer).
     %% This seems to be in keeping with how NETCONF does it.
     X = if is_integer(X0) -> list_to_binary(integer_to_list(X0));
-	   is_binary(X0)  -> X0;
-	   is_list(X0) -> list_to_binary(X0)
-	end,
+           is_binary(X0)  -> X0;
+           is_list(X0) -> list_to_binary(X0)
+        end,
     case find_enum(En, X) of
-	[] -> error({type_error, [X0, T]});
-	[{Key, _}] ->
-	    Key;
-	[{K1, V1}, {K2, V2}] ->
-	    %% Either V1 or V2 must be equal to X, or it's an error
-	    if V1 == X -> K1;
-	       V2 == X -> K2;
-	       true -> error({type_error, [X0, T]})
-	    end
+        [] -> error({type_error, [X0, T]});
+        [{Key, _}] ->
+            Key;
+        [{K1, V1}, {K2, V2}] ->
+            %% Either V1 or V2 must be equal to X, or it's an error
+            if V1 == X -> K1;
+               V2 == X -> K2;
+               true -> error({type_error, [X0, T]})
+            end
     end;
 to_json_type(X, {type, _, <<"union">>, Ts} = Type) ->
     to_json_type_union(Ts, X, Type);
@@ -198,19 +198,19 @@ remove_yang_info([]) ->
 
 validate_request({call, Method, {struct, Request}}, [{module,_,M,Elems}]) ->
     ShortMethod = case re:split(Method, ":", [{return, binary}]) of
-		      [M, Meth] ->
-			  Meth;
-		      [Meth]    -> Meth;
-		      [_OtherM, _] ->
-			  error({unknown_method, Method})
-		  end,
+                      [M, Meth] ->
+                          Meth;
+                      [Meth]    -> Meth;
+                      [_OtherM, _] ->
+                          error({unknown_method, Method})
+                  end,
     %% we have the right module
     case find_rpc(Elems, ShortMethod) of
-	error ->
-	    {error, {unknown_method, Method}};
-	{rpc, _, _ActualMethod, Data} ->
-	    {input,_,_,InputElems} = lists:keyfind(input, 1, Data),
-	    validate_rpc_request(InputElems, Request)
+        error ->
+            {error, {unknown_method, Method}};
+        {rpc, _, _ActualMethod, Data} ->
+            {input,_,_,InputElems} = lists:keyfind(input, 1, Data),
+            validate_rpc_request(InputElems, Request)
     end.
 
 find_rpc([{rpc, _, Meth, _} = RPC|_], Meth) ->
@@ -222,34 +222,34 @@ find_rpc([], _) ->
 
 validate_rpc_request(Req, Data) ->
     try begin
-	    {ValidReq, Meta} = validate_rpc_request(Req, Data, [], []),
-	    {ok, ValidReq, Meta}
-	end
+            {ValidReq, Meta} = validate_rpc_request(Req, Data, [], []),
+            {ok, ValidReq, Meta}
+        end
     catch
-	throw:Error ->
-	    {error, Error}
+        throw:Error ->
+            {error, Error}
     end.
 
 validate_rpc_request([{Leaf,_,Key,Info}|Elems], Data, Acc, Meta)
   when Leaf == leaf; Leaf == anyxml ->
     case keytake(Key, Data) of
-	{{_, Value}, Data1} ->
-	    Value1 = convert_elem(Leaf, Key, Value, Info),
-	    validate_rpc_request(
-	      Elems, Data1,
-	      [{to_atom(Key), Value1, Info}|Acc], Meta);
-	false ->
-	    validate_rpc_request_missing(Leaf, Elems, Key, Info, Data, Acc, Meta)
+        {{_, Value}, Data1} ->
+            Value1 = convert_elem(Leaf, Key, Value, Info),
+            validate_rpc_request(
+              Elems, Data1,
+              [{to_atom(Key), Value1, Info}|Acc], Meta);
+        false ->
+            validate_rpc_request_missing(Leaf, Elems, Key, Info, Data, Acc, Meta)
     end;
 validate_rpc_request([{Stmt, _, Key, Info}|Elems], Data, Acc, Meta)
   when Stmt==list; Stmt=='leaf-list' ->
     case keytake(Key, Data) of
-	false ->
-	    validate_rpc_request_missing(Stmt, Elems, Key, Info, Data, Acc, Meta);
-	{Found, Data1} ->
-	    validate_rpc_request(
-	      Elems, Data1,
-	      [validate_rpc_elem(Stmt, Found, Info)|Acc], Meta)
+        false ->
+            validate_rpc_request_missing(Stmt, Elems, Key, Info, Data, Acc, Meta);
+        {Found, Data1} ->
+            validate_rpc_request(
+              Elems, Data1,
+              [validate_rpc_elem(Stmt, Found, Info)|Acc], Meta)
     end;
 validate_rpc_request([Other|Elems], Data, Acc, Meta) ->
     validate_rpc_request(Elems, Data, Acc, [Other|Meta]);
@@ -260,20 +260,20 @@ validate_rpc_request([], [_|_] = Unknown, _, _) ->
 
 validate_rpc_elem(list, {Key, {array, ListElems}}, Info) ->
     case lists:map(fun({struct, StructElems}) ->
-			   validate_rpc_request(Info, StructElems, [], [])
-		   end, ListElems) of
-	[] ->
-	    check_min_elements([], Key, Info),
-	    %% Meta = [I || I <- Info,
-	    %% 		 not lists:member(element(1,I),
-	    %% 				  [leaf, anyxml, list, 'leaf-list'])],
-	    {to_atom(Key), [], Info};
-	[_|_] = List ->
-	    Len = length(List),
-	    check_min_elements_(Len, Key, lists:keyfind('min-elements',1,Info)),
-	    check_max_elements_(Len, Key, lists:keyfind('max-elements',1,Info)),
-	    {to_atom(Key), [[{X,V} || {X,V,_} <- L]
-					   || {L,_} <- List], Info}
+                           validate_rpc_request(Info, StructElems, [], [])
+                   end, ListElems) of
+        [] ->
+            check_min_elements([], Key, Info),
+            %% Meta = [I || I <- Info,
+            %%           not lists:member(element(1,I),
+            %%                            [leaf, anyxml, list, 'leaf-list'])],
+            {to_atom(Key), [], Info};
+        [_|_] = List ->
+            Len = length(List),
+            check_min_elements_(Len, Key, lists:keyfind('min-elements',1,Info)),
+            check_max_elements_(Len, Key, lists:keyfind('max-elements',1,Info)),
+            {to_atom(Key), [[{X,V} || {X,V,_} <- L]
+                                           || {L,_} <- List], Info}
     end;
 validate_rpc_elem('leaf-list', {Key, {array, ListElems}}, Info) ->
     {type,_,_,_} = Type = lists:keyfind(type, 1, Info),
@@ -288,40 +288,40 @@ validate_rpc_elem(Stmt, {Key, Other}, _Info)
 
 check_max_elements(List, Key, Info) ->
     case lists:keyfind('max-elements', 1 , Info) of
-	{_, _, _, _} = Max ->
-	    Length = length(List),
-	    check_max_elements_(Length, Key, Max);
-	false ->
-	    ok
+        {_, _, _, _} = Max ->
+            Length = length(List),
+            check_max_elements_(Length, Key, Max);
+        false ->
+            ok
     end.
 
 check_max_elements_(_, _Key, {'max-elements',_,<<"unbounded">>,_}) ->
     ok;
 check_max_elements_(Length, Key, {'max-elements',_,Max,_}) ->
     case list_to_integer(binary_to_list(Max)) of
-	N when N < Length ->
-	    throw({invalid_params, {'max-elements', [Key, N, Length]}});
-	_ ->
-	    ok
+        N when N < Length ->
+            throw({invalid_params, {'max-elements', [Key, N, Length]}});
+        _ ->
+            ok
     end;
 check_max_elements_(_, _, false) ->
     ok.
 
 check_min_elements(List, Key, Info) ->
     case lists:keyfind('min-elements', 1 , Info) of
-	{_, _, _, _} = Max ->
-	    Length = length(List),
-	    check_min_elements_(Length, Key, Max);
-	false ->
-	    ok
+        {_, _, _, _} = Max ->
+            Length = length(List),
+            check_min_elements_(Length, Key, Max);
+        false ->
+            ok
     end.
 
 check_min_elements_(Length, Key, {'min-elements',_,Max,_}) ->
     case list_to_integer(binary_to_list(Max)) of
-	N when N > Length ->
-	    throw({invalid_params, {'min-elements', [Key, N, Length]}});
-	_ ->
-	    ok
+        N when N > Length ->
+            throw({invalid_params, {'min-elements', [Key, N, Length]}});
+        _ ->
+            ok
     end;
 check_min_elements_(_, _, false) ->
     ok.
@@ -329,34 +329,34 @@ check_min_elements_(_, _, false) ->
 validate_rpc_request_missing(Stmt, Elems, Key, Info, Data, Acc, Meta)
   when Stmt==list; Stmt=='leaf-list' ->
     case lists:keyfind('min-elements', 1, Info) of
-	{_, _, <<"0">>, _} ->
-	    validate_rpc_request(Elems, Data, Acc, Meta);
-	false ->
-	    validate_rpc_request(Elems, Data, Acc, Meta);
-	_ ->
-	    throw({invalid_params, {required, [Key|also_missing(Elems, Data)]}})
+        {_, _, <<"0">>, _} ->
+            validate_rpc_request(Elems, Data, Acc, Meta);
+        false ->
+            validate_rpc_request(Elems, Data, Acc, Meta);
+        _ ->
+            throw({invalid_params, {required, [Key|also_missing(Elems, Data)]}})
     end;
 validate_rpc_request_missing(Stmt, Elems, Key, Info, Data, Acc, Meta) ->
     case lists:keyfind(mandatory,1,Info) of
-	{mandatory,true} ->
-	    %% Mandatory leafs MUST NOT have a default statement
-	    %% (RFC6020, 7.6.4)
-	    AlsoMissing = also_missing(Elems, Data),
-	    throw({invalid_params, {required, [Key|AlsoMissing]}});
-	_ when Stmt==leaf ->
-	    case lists:keyfind(default, 1, Info) of
-		{default, _, Def, _} ->
-		    Value = convert_elem(Stmt, Key, Def, Info),
-		     validate_rpc_request(
-		       Elems, Data,
-		       [{to_atom(Key), Value, Info}|Acc], Meta);
-		false ->
-		    validate_rpc_request(Elems, Data, Acc, Meta)
-	    end;
-	_ ->
-	    %% FIXME: check whether this is in fact the right action for all
-	    %% non-leaf statements
-	    validate_rpc_request(Elems, Data, Acc, Meta)
+        {mandatory,true} ->
+            %% Mandatory leafs MUST NOT have a default statement
+            %% (RFC6020, 7.6.4)
+            AlsoMissing = also_missing(Elems, Data),
+            throw({invalid_params, {required, [Key|AlsoMissing]}});
+        _ when Stmt==leaf ->
+            case lists:keyfind(default, 1, Info) of
+                {default, _, Def, _} ->
+                    Value = convert_elem(Stmt, Key, Def, Info),
+                     validate_rpc_request(
+                       Elems, Data,
+                       [{to_atom(Key), Value, Info}|Acc], Meta);
+                false ->
+                    validate_rpc_request(Elems, Data, Acc, Meta)
+            end;
+        _ ->
+            %% FIXME: check whether this is in fact the right action for all
+            %% non-leaf statements
+            validate_rpc_request(Elems, Data, Acc, Meta)
     end.
 
 also_missing(Elems, Env, Data) ->
@@ -364,10 +364,10 @@ also_missing(Elems, Env, Data) ->
 
 also_missing([{Stmt,_,Key,I}|T], Data) ->
     case (req_mandatory(Stmt, I) andalso not_in_data(Key, Data)) of
-	true ->
-	    [Key|also_missing(T, Data)];
-	false ->
-	    also_missing(T, Data)
+        true ->
+            [Key|also_missing(T, Data)];
+        false ->
+            also_missing(T, Data)
     end;
 also_missing([], _) ->
     [].
@@ -379,58 +379,55 @@ req_mandatory(Stmt, I) when Stmt==list; Stmt=='leaf-list' ->
 
 req_mandatory_elem(I) ->
     case lists:keyfind(mandatory, 1, I) of
-	{_, _, <<"true">>, _} ->
-	    true;
-	_ ->
-	    false
+        {_, _, <<"true">>, _} ->
+            true;
+        _ ->
+            false
     end.
 
 req_non_zero_list(I) ->
     case lists:keyfind('min-elements', 1, I) of
-	{_, _, <<"0">>, _} ->
-	    false;
-	false ->
-	    false;
-	_ ->
-	    true
+        {_, _, <<"0">>, _} ->
+            false;
+        false ->
+            false;
+        _ ->
+            true
     end.
 
 not_in_data(Key, Data) ->
     not lists:any(fun({K,_}) ->
-			  comp(Key, K)
-		  end, Data).
+                          comp(Key, K)
+                  end, Data).
 
 convert_elem(Stmt, Key, Value, Info) ->
     convert_elem(Stmt, Key, Value, lists:keyfind(type,1,Info), Info).
-
-
-
 
 convert_elem(anyxml, _, Value, _, _) ->
     Value;
 convert_elem(leaf, Key, Value, Type, _Info) ->
     case yang:check_type(Value, Type) of
-	{true, NewVal} ->
-	    NewVal;
-	false ->
-	    throw({invalid_params, {wrong_type, [Key, Value, Type]}})
+        {true, NewVal} ->
+            NewVal;
+        false ->
+            throw({invalid_params, {wrong_type, [Key, Value, Type]}})
     end.
 
 keytake(K, Data) ->
     case keyfind(K, Data) of
-	false ->
-	    false;
-	Found ->
-	    {Found, Data -- [Found]}
+        false ->
+            false;
+        Found ->
+            {Found, Data -- [Found]}
     end.
 
 keyfind(A, [H|T]) when is_tuple(H) ->
     K = element(1, H),
     case comp(A,K) of
-	true ->
-	    H;
-	false ->
-	    keyfind(A, T)
+        true ->
+            H;
+        false ->
+            keyfind(A, T)
     end;
 keyfind(_, []) ->
     false.
@@ -444,38 +441,38 @@ comp(_, _) ->
     false.
 
 %% ===================================================================
-%% rpc_to_json(Yang, Attrs, Reply) -> JSONTerm
+%% data_to_json(Yang, Attrs, Reply) -> JSONTerm
 %% ===================================================================
 data_to_json([{Stmt, _, Key, Info} = Elem|T], Env, Data)
   when Stmt==leaf; Stmt==anyxml; Stmt==list; Stmt=='leaf-list' ->
     case keyfind(Key, Data) of
-	false ->
-	    case keyfind(Key, Env) of
-		Found when is_tuple(Found) ->
-		    [data_to_json_(Elem, Env, element(2, Found))
-		     | data_to_json(T, Env, Data)];
-		false ->
-		    case req_mandatory(Stmt, Info) of
-			true ->
-			    error({invalid_params,
-				   {required, [Key|
-					       also_missing(T, Env, Data)]}});
-			false ->
-			    data_to_json_default(Elem)
-				++ data_to_json(T, Env, Data)
-		    end
-	    end;
-	Found when is_tuple(Found) ->
-	    [data_to_json_(Elem, Env, element(2, Found))
-	     | data_to_json(T, Env, Data)]
+        false ->
+            case keyfind(Key, Env) of
+                Found when is_tuple(Found) ->
+                    [data_to_json_(Elem, Env, element(2, Found))
+                     | data_to_json(T, Env, Data)];
+                false ->
+                    case req_mandatory(Stmt, Info) of
+                        true ->
+                            error({invalid_params,
+                                   {required, [Key|
+                                               also_missing(T, Env, Data)]}});
+                        false ->
+                            data_to_json_default(Elem)
+                                ++ data_to_json(T, Env, Data)
+                    end
+            end;
+        Found when is_tuple(Found) ->
+            [data_to_json_(Elem, Env, element(2, Found))
+             | data_to_json(T, Env, Data)]
     end;
 data_to_json({Stmt, _, Key, _} = Elem, Env, {Key1, Data})
   when Stmt==leaf; Stmt==anyxml; Stmt==list; Stmt=='leaf-list' ->
     case comp(Key, Key1) of
-	true ->
-	    data_to_json_(Elem, Env, Data);
-	false ->
-	    error({invalid_params, {required, [Key]}})
+        true ->
+            data_to_json_(Elem, Env, Data);
+        false ->
+            error({invalid_params, {required, [Key]}})
     end;
 data_to_json([_|T], Env, Data) ->
     data_to_json(T, Env, Data);
@@ -484,46 +481,46 @@ data_to_json([], _, _) ->
 
 data_to_json_default({Stmt,_,Key,Info}) when Stmt==leaf; Stmt==anyxml ->
     case lists:keyfind(default, 1, Info) of
-	{_, _, Default, _} ->
-	    [{Key, to_json_type(Default, get_type(Info))}];
-	false ->
-	    []
+        {_, _, Default, _} ->
+            [{Key, to_json_type(Default, get_type(Info))}];
+        false ->
+            []
     end;
 data_to_json_default({Stmt,_,Key,_}) when Stmt==list; Stmt=='leaf-list' ->
     [{Key, {array, []}}].
 
-data_to_json_({Stmt, _, Key, Info}, _Env, Data)
-  when Stmt==leaf; Stmt==anyxml ->
+data_to_json_({anyxml, _, Key, _}, _Env, Data) ->
+    {Key, Data};
+data_to_json_({leaf, _, Key, Info}, _Env, Data) ->
     {Key, to_json_type(Data, get_type(Info))};
 data_to_json_({Stmt, _, Key, Info}, Env, Data)
   when Stmt==list; Stmt=='leaf-list' ->
     Data1 = case Data of
-		{array, D} when is_list(D) -> D;
-		D when is_list(D) -> D;
-		_ ->
-		    error({invalid_params, {type_error, [Key, Stmt, Data]}})
-	    end,
+                {array, D} when is_list(D) -> D;
+                D when is_list(D) -> D;
+                _ ->
+                    error({invalid_params, {type_error, [Key, Stmt, Data]}})
+            end,
     if Stmt=='leaf-list' ->
-	    Type = get_type(Info),
-	    {Key, {array, [to_json_type(X, Type) || X <- Data1]}};
+            Type = get_type(Info),
+            {Key, {array, [to_json_type(X, Type) || X <- Data1]}};
        Stmt==list ->
-	    {Key, {array,
-		   lists:map(
-		     fun({struct,Elems}) ->
-			     {struct, data_to_json(Info, Env, Elems)};
-			(L) when is_list(L) ->
-			     {struct, data_to_json(Info, Env, L)};
-			(Other) ->
-			     error({invalid_params,
-				    [{type_error,[Key,Info,Other]}]})
-		     end, Data1)}}
+            {Key, {array,
+                   lists:map(
+                     fun({struct,Elems}) ->
+                             {struct, data_to_json(Info, Env, Elems)};
+                        (L) when is_list(L) ->
+                             {struct, data_to_json(Info, Env, L)};
+                        (Other) ->
+                             error({invalid_params,
+                                    [{type_error,[Key,Info,Other]}]})
+                     end, Data1)}}
     end.
 
 get_type(Info) ->
     {type,_,_,_} = lists:keyfind(type, 1, Info).
 
 %% ===================================================================
-
 
 to_json_rpc(Data, Arg, M) ->
     Imports = imports(Data, Arg),
@@ -647,9 +644,6 @@ mk_rpc_pair(InOut, N, Data, Imports) ->
 				{struct, rpc_params(O, Data, Imports)}
 			end}]}}}.
 
-extensions(InOut) ->
-    [{{Prefix,Keyword},Arg,Opts} || {{Prefix,Keyword},_,Arg,Opts} <- InOut].
-
 
 rpc_params([{uses,_,G,_}|T], Data, Imports) ->
     {Where, GrpName} = case re:split(G, <<":">>) of
@@ -709,31 +703,28 @@ markdown(File, JSON) ->
     end.
 
 markdown([{module, M, RPCs}|T]) ->
-    ["## Module: ", M, "\n\n", markdown_rpcs(RPCs), "\n\n" | markdown(T)];
+    ["# Module: ", M, "\n\n", markdown_rpcs(RPCs), "\n\n" | markdown(T)];
 markdown([]) ->
     [].
 
-markdown_rpcs([{Not, {notification, Info, Msg}} | T]) ->
-    ["#### Notification: ", Not, "\n",
-     "```json\n", pp_json(Msg), "\n```\n\n",
-     case proplists:get_value(description, Info, "") of
+markdown_rpcs([{Not, {notification, Descr, Msg}} | T]) ->
+    ["## Notification: ", Not, "\n\n\n", i(0), pp_json(Msg), "\n\n\n",
+     case Descr of
 	 "" -> "";
-	 Descr ->
+	 _ ->
 	     [Descr, "\n\n"]
      end,
-     markdown_extensions(Info), "\n\n",
      markdown_descriptions(Msg), "\n\n" | markdown_rpcs(T)];
-markdown_rpcs([{RPC, {Info, {request, Req}, {reply, Rep}}} | T]) ->
-    ["### RPC: ", RPC, "\n\n",
-     "#### Request\n", "```json\n", pp_json(Req), "\n```\n\n",
-     case proplists:get_value(description, Info, "") of
+markdown_rpcs([{RPC, {Descr, {request, Req}, {reply, Rep}}} | T]) ->
+    ["# ", RPC, "\n\n",
+     "## Request\n\n\n", i(0), pp_json(Req), "\n\n\n",
+     case Descr of
 	 "" -> "";
-	 Descr ->
+	 _ ->
 	     [Descr, "\n\n"]
      end,
-     markdown_extensions(Info), "\n\n",
      markdown_descriptions(Req), "\n\n",
-     "#### Reply\n", "```json\n", pp_json(Rep), "\n```\n\n",
+     "## Reply\n\n\n", i(0), pp_json(Rep), "\n\n\n",
      markdown_descriptions(Rep), "\n\n" | markdown_rpcs(T)];
 markdown_rpcs([]) ->
     [].
@@ -742,28 +733,14 @@ markdown_descriptions(Msg) ->
     case [X || {_,{_,_}} = X <- collect_descriptions(Msg, orddict:new())] of
 	[] -> [];
 	[{K,{D,T}}|Tail] ->
-	    ["**descriptions**\n",
-	     "<dl><dt>", K, "</dt>\n", "<dd>", descr_text(D),
-	     " (<b>type:</b> ", type_to_text(T), ")", "</dd>",
-	     [["\n<dt>", K1, "</dt>\n", "<dd>", descr_text(D1),
-	       " (<b>type:</b> ", type_to_text(T1), ")", "</dd>"]
+	    ["### Elements\n",
+	     "**", K, "** ", D,
+	     " (**type:** ", type_to_text(T), ")\n\n",
+	     [["**", K1, "** ", D1,
+	       " (**type:** ", type_to_text(T1), ")\n\n"]
 	      || {K1,{D1,T1}} <- Tail],
-	     "\n</dl>\n\n"]
+	     "\n\n"]
     end.
-
-markdown_extensions(Info) ->
-    case [{M,E,Arg} || {{M,E},Arg,_} <- Info] of
-	[] -> [];
-	[_|_] = Exts ->
-	    ["**extensions**\n",
-	     "<dl>\n",
-	     [["<dt>", M, ":", E, "</dt>", "<dd>", Arg, "</dd>\n"]
-	      || {M,E,Arg} <- Exts],
-	     "</dl>\n"]
-    end.
-
-descr_text(D) ->
-    proplists:get_value(description,D,"").
 
 collect_descriptions({struct, L}, Acc) ->
     lists:foldl(fun collect_descriptions/2, Acc, L);
@@ -782,22 +759,21 @@ collect_descriptions({_K,V}, Acc) ->
 collect_descriptions(_, Acc) ->
     Acc.
 
-
 pp_json(Json) ->
     pp_json(Json, 0).
 
 pp_json(void, _) ->
     "\"ok\"";
 pp_json({struct, []}, I) ->
-    [i(I), "{}"];
+    [i(I), "{}\n"];
 pp_json({struct, [H|T]}, I) ->
     I1 = I+1,
-    ["{", pp_json(H, I1), [[",\n", i(I1), pp_json(Term,I1)] || Term <- T], "}"];
+    ["{\n", i(I1), pp_json(H, I1), [[",\n", i(I1), pp_json(Term,I1)] || Term <- T], "\n", i(I), "}"];
 pp_json({array, []}, _I) ->
     ["[]"];
 pp_json({array, [H|T]}, I) ->
     I1 = I+1,
-    ["[", pp_json(H, I1), [[",\n", i(I1), pp_json(Term,I1)] || Term <- T], "]"];
+    ["[\n", i(I1), pp_json(H, I1), [[",\n", i(I1), pp_json(Term,I1)] || Term <- T], "\n", i(I), "]"];
 pp_json(V, _I) when is_binary(V); is_list(V) ->
     io_lib:fwrite("\"~s\"", [V]);
 pp_json(V, _I) when is_integer(V) ->
@@ -810,15 +786,15 @@ pp_json({K,V}, I) ->
 
 pp_json_(K,V,I) ->
     Part1 = ["\"", K, "\": "],
-    I1 = I + iolist_size(Part1),
-    [Part1, pp_json(V, I1)].
+%%    I1 = I+1,
+    [Part1, pp_json(V, I)].
 
 descr(L) ->
     case lists:keyfind(description, 1, L) of
 	false ->
-	    [{description, ""}|extensions(L)];
+	    "";
 	{_, _, B,_} ->
-	    [{description, binary_to_list(B)}|extensions(L)]
+	    binary_to_list(B)
     end.
 
 type(Is, Data, Imports) ->
@@ -915,11 +891,11 @@ type_to_text_({type, undefined}) ->
     "untyped";
 type_to_text_({type, anyxml}) ->
     "XML";
-type_to_text_({type, _, <<"enumeration">>, [{enum,_,E,I} | EnT]}) ->
+type_to_text_({type, _, <<"enumeration">>, [{enum,_,E,I} | _] = En}) ->
     [ val2txt(I), " (", E, ")" | [ [ " | ", val2txt(I1), " (", E1, ")"]
-				   || {enum, _, E1, I1} <- EnT] ];
+				   || {enum, _, E1, I1} <- En] ];
 type_to_text_({type, _, <<"boolean">>, _}) ->
-    "true | false";
+    "\"1\" (true) | \"0\" (false)";
 type_to_text_({type, _, <<"union">>, Ts}) ->
     [ "One of:", [["~n* ", type_to_text(T)] || T <- Ts] ];
 type_to_text_({type, _, T, _}) ->
@@ -940,10 +916,10 @@ mandatory_to_text(L) ->
 %%     V.
 val2txt(I) ->
     {value,_,V,_} = lists:keyfind(value, 1, I),
-    binary_to_list(V).
+    ["\"", binary_to_list(V), "\""].
 
 i(I) ->
-    lists:duplicate(I,$\s).
+    lists:duplicate(I*4+4,$\s) .
 
 to_atom(L) when is_list(L) ->
     list_to_atom(L);
@@ -956,11 +932,11 @@ to_atom(A) when is_atom(A) ->
 find_enum([{enum, _, Key, I}|T], X) ->
     V = get_en_value(I),
     if X == V ->
-	    [{Key, V}];
+            [{Key, V}];
        X == Key ->
-	    [{Key, V}|find_enum(T, X)];
+            [{Key, V}|find_enum(T, X)];
        true ->
-	    find_enum(T, X)
+            find_enum(T, X)
     end;
 find_enum([_|T], X) ->
     find_enum(T, X);
@@ -970,8 +946,6 @@ find_enum([], _) ->
 get_en_value(I) ->
     {value, _, V, _} = lists:keyfind(value, 1, I),
     V.
-
-
 
 %% ===================================================================
 %% EUnit Test Code
@@ -995,63 +969,63 @@ validate_json_test_() ->
 
 simplest_rpc_test(Y) ->
     {ok, [{a,17,[]}], []} =
-	yang_json:validate_request(
-	  {call, <<"y0:t0">>,
-	   {struct, [{<<"a">>,17}]}}, Y).
+        yang_json:validate_request(
+          {call, <<"y0:t0">>,
+           {struct, [{<<"a">>,17}]}}, Y).
 
 simplest_rpc_test1(Y) ->
     {ok, [{l,[],[{leaf,_,<<"x">>,[{type,_,<<"uint32">>,_}]}]}], []} =
-	yang_json:validate_request(
-	  {call, <<"y0:t1">>,
-	   {struct, [{<<"l">>,{array, []}}]}}, Y).
+        yang_json:validate_request(
+          {call, <<"y0:t1">>,
+           {struct, [{<<"l">>,{array, []}}]}}, Y).
 
 valid_rpc_test(Y) ->
     {ok, [
-	  {a, 17, [{{<<"y">>,<<"foo">>},_,<<"in_a">>,_},
-		   {type,_,<<"uint32">>,[]},
-		   {mandatory,_,true,[]}]},
-	  {b, [<<"abc">>], [{type,_,<<"string">>,[]},
-			    {'min-elements',_,<<"1">>,[]}]},
-	  {c, [
-	       [{x, 1}, {y, <<"abc">>}]
-	      ], [{leaf,_,<<"x">>,[{{<<"y">>,<<"foo">>},_,<<"in_x">>,_},
-				   {type,_,<<"uint32">>,_}]},
-		  {leaf,_,<<"y">>,[{type,_,<<"string">>,_}]}]}
-	 ], [{{<<"y">>,<<"foo">>},_,<<"input">>,_}]} =
-	yang_json:validate_request(
-	  {call,<<"y:t1">>,
-	   {struct,[{<<"a">>,17},
-		    {<<"b">>, {array, [<<"abc">>]}},
-		    {<<"c">>,{array,[
-				     {struct, [{<<"x">>,1},
-					       {<<"y">>,<<"abc">>}
-					      ]}
-				    ]}}
-		   ]}
-	  }, Y).
+          {a, 17, [{{<<"y">>,<<"foo">>},_,<<"in_a">>,_},
+                   {type,_,<<"uint32">>,[]},
+                   {mandatory,_,true,[]}]},
+          {b, [<<"abc">>], [{type,_,<<"string">>,[]},
+                            {'min-elements',_,<<"1">>,[]}]},
+          {c, [
+               [{x, 1}, {y, <<"abc">>}]
+              ], [{leaf,_,<<"x">>,[{{<<"y">>,<<"foo">>},_,<<"in_x">>,_},
+                                   {type,_,<<"uint32">>,_}]},
+                  {leaf,_,<<"y">>,[{type,_,<<"string">>,_}]}]}
+         ], [{{<<"y">>,<<"foo">>},_,<<"input">>,_}]} =
+        yang_json:validate_request(
+          {call,<<"y:t1">>,
+           {struct,[{<<"a">>,17},
+                    {<<"b">>, {array, [<<"abc">>]}},
+                    {<<"c">>,{array,[
+                                     {struct, [{<<"x">>,1},
+                                               {<<"y">>,<<"abc">>}
+                                              ]}
+                                    ]}}
+                   ]}
+          }, Y).
 
 missing_list_test(Y) ->
     {error, {invalid_params, {required, [<<"b">>]} } } =
-	yang_json:validate_request(
-	  {call,<<"y:t1">>,
-	   {struct,[{<<"a">>,17},
-		    %% missing <<"b">>
-		    {<<"c">>,{array,[{struct,[{<<"x">>,1},
-					      {<<"y">>,<<"abc">>}]}]}
-		    }]}
-	  }, Y).
+        yang_json:validate_request(
+          {call,<<"y:t1">>,
+           {struct,[{<<"a">>,17},
+                    %% missing <<"b">>
+                    {<<"c">>,{array,[{struct,[{<<"x">>,1},
+                                              {<<"y">>,<<"abc">>}]}]}
+                    }]}
+          }, Y).
 
 testdata(File, Fn) ->
     {ok, Y} = yang_parser:deep_parse(
-		File, [{open_hook, yang:bin_hook([{File, Fn}])}]),
+                File, [{open_hook, yang:bin_hook([{File, Fn}])}]),
     Y.
 
 enum_test() ->
     File = "e1.yang",
     {ok, [{module,_,<<"e1">>, Y}]} =
-	yang_parser:deep_parse(
-	  File,
-	  [{open_hook, yang:bin_hook([{File, fun e1/0}])}]),
+        yang_parser:deep_parse(
+          File,
+          [{open_hook, yang:bin_hook([{File, fun e1/0}])}]),
     [{leaf,_,<<"l">>,I}] = [E || {leaf,_,<<"l">>,_} = E <- Y],
     Type = lists:keyfind(type, 1, I),
     {true, <<"zero">>} = yang:check_type(<<"0">>, Type),
@@ -1069,37 +1043,37 @@ enum_test() ->
 
 enum_type_test() ->
     Type = {type,186,<<"enumeration">>,
-	    [{{<<"$yang">>,<<"origtype">>},186,<<"exo:status-code">>,[]},
-	     {enum,41,<<"accepted">>,
-	      [{description,42,
-		<<"Operation has been accepted and is in progress.">>,[]},
-	       {value,43,<<"0">>,[]}]},
-	     {enum,46,<<"complete">>,
-	      [{description,47,
-		<<"The operation has completed successfully.">>,[]},
-	       {value,48,<<"1">>,[]}]},
-	     {enum,51,<<"time-out">>,
-	      [{description,52,<<"Operation has timed out.">>,[]},
-	       {value,53,<<"2">>,[]}]},
-	     {enum,56,<<"device-connected">>,
-	      [{description,57,
-		<<"A connection has been established...">>,[]},
-	       {value,60,<<"3">>,[]}]},
-	     {enum,63,<<"device-unknown">>,
-	      [{description,64,
-		<<"The device-id provided with the operation is...">>,[]},
-	       {value,66,<<"4">>,[]}]},
-	     {enum,70,<<"device-error">>,
-	      [{description,71,
-		<<"The device encountered an error when ...">>,[]},
-	       {value,74,<<"5">>,[]}]},
-	     {enum,77,<<"format-error">>,
-	      [{description,78,<<"The RPC had an incorrect element ...">>,
-		[]},
-	       {value,79,<<"6">>,[]}]},
-	     {enum,82,<<"value-error">>,
-	      [{description,83,<<"The RPC had illegal values in ...">>,[]},
-	       {value,85,<<"7">>,[]}]}]},
+            [{{<<"$yang">>,<<"origtype">>},186,<<"exo:status-code">>,[]},
+             {enum,41,<<"accepted">>,
+              [{description,42,
+                <<"Operation has been accepted and is in progress.">>,[]},
+               {value,43,<<"0">>,[]}]},
+             {enum,46,<<"complete">>,
+              [{description,47,
+                <<"The operation has completed successfully.">>,[]},
+               {value,48,<<"1">>,[]}]},
+             {enum,51,<<"time-out">>,
+              [{description,52,<<"Operation has timed out.">>,[]},
+               {value,53,<<"2">>,[]}]},
+             {enum,56,<<"device-connected">>,
+              [{description,57,
+                <<"A connection has been established...">>,[]},
+               {value,60,<<"3">>,[]}]},
+             {enum,63,<<"device-unknown">>,
+              [{description,64,
+                <<"The device-id provided with the operation is...">>,[]},
+               {value,66,<<"4">>,[]}]},
+             {enum,70,<<"device-error">>,
+              [{description,71,
+                <<"The device encountered an error when ...">>,[]},
+               {value,74,<<"5">>,[]}]},
+             {enum,77,<<"format-error">>,
+              [{description,78,<<"The RPC had an incorrect element ...">>,
+                []},
+               {value,79,<<"6">>,[]}]},
+             {enum,82,<<"value-error">>,
+              [{description,83,<<"The RPC had illegal values in ...">>,[]},
+               {value,85,<<"7">>,[]}]}]},
     {true, <<"value-error">>} = yang:check_type(7, Type),
     {true, <<"value-error">>} = yang:check_type("7", Type),
     {true, <<"value-error">>} = yang:check_type(<<"7">>, Type),
