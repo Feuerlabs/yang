@@ -194,7 +194,7 @@ parse_expand(F, L, Opts, Ps) ->
 	    expand_module(Type, Data, Name,
 			  set_cur_file(F, Opts), Ps);
 	{error, Error} ->
-	    error({Error, [import, L, F]})
+	    erlang:error({Error, [import, L, F]})
     end.
 
 submodules(Data, Pfx, M, Opts, Ps) ->
@@ -203,7 +203,7 @@ submodules(Data, Pfx, M, Opts, Ps) ->
 	  fun({include, L, SubM, IOpts}, Visited) ->
 		  case lists:member(SubM, Visited) of
 		      true ->
-			  error({include_loop, {L, [SubM|Visited]}});
+			  erlang:error({include_loop, {L, [SubM|Visited]}});
 		      false ->
 			  ?debug("m ~p, visited ~p",[M, Visited]),
 			  Data1 = include_submodule(SubM, IOpts, Opts,
@@ -227,7 +227,7 @@ include_submodule(M, IOpts, Opts, Ps) ->
         {ok, [{submodule,_,_,Data}]} ->
             Data;
 	Other ->
-	    error({include_error, [M, IOpts, Other]})
+	    erlang:error({include_error, [M, IOpts, Other]})
     end.
 
 %% expand_uses(Data, OwnPfx, Imports, Ps) ->

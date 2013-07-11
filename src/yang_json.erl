@@ -47,7 +47,7 @@ to_json_type(X, {type,_,<<"decimal64">>,I} = T) when is_float(X) ->
 	?fd(16, -922.3372036854775808, 922.3372036854775807) -> ok;
 	?fd(17, -92.23372036854775808, 92.23372036854775807) -> ok;
 	?fd(18, -9.223372036854775808, 9.223372036854775807) -> ok;
-	_ -> error({type_error, [X, T]})
+	_ -> erlang:error({type_error, [X, T]})
     end,
     list_to_binary(io_lib:fwrite("~." ++ integer_to_list(F) ++ "f", [X]));
 to_json_type(X, {type,_,<<"int", _/binary>>,_}) when is_integer(X) ->
@@ -72,14 +72,14 @@ to_json_type(X0, {type,_,<<"enumeration">>, En} = T) ->
            is_list(X0) -> list_to_binary(X0)
         end,
     case find_enum(En, X) of
-        [] -> error({type_error, [X0, T]});
+        [] -> erlang:error({type_error, [X0, T]});
         [{Key, _}] ->
             Key;
         [{K1, V1}, {K2, V2}] ->
             %% Either V1 or V2 must be equal to X, or it's an error
             if V1 == X -> K1;
                V2 == X -> K2;
-               true -> error({type_error, [X0, T]})
+               true -> erlang:error({type_error, [X0, T]})
             end
     end;
 to_json_type(X, {type, _, <<"union">>, Ts} = Type) ->
@@ -95,7 +95,7 @@ to_json_type_union([T|Ts], X, Type) ->
 	    to_json_type_union(Ts, X, Type)
     end;
 to_json_type_union([], X, Type) ->
-    error({type_error, [X, Type]}).
+    erlang:error({type_error, [X, Type]}).
 
 json_rpc(YangFile) ->
     json_rpc(YangFile, []).
@@ -125,7 +125,7 @@ hrl(YangFile, HrlFile, Opts) ->
     write_hrl(HrlFile, Forms, Opts).
 
 write_hrl(_HrlFile, _Forms, _Opts) ->
-    error(nyi).
+    erlang:error(nyi).
 
 read(F) ->
     read(F, filename:extension(F), []).
@@ -202,7 +202,7 @@ validate_request({call, Method, {struct, Request}}, [{module,_,M,Elems}]) ->
                           Meth;
                       [Meth]    -> Meth;
                       [_OtherM, _] ->
-                          error({unknown_method, Method})
+                          erlang:error({unknown_method, Method})
                   end,
     %% we have the right module
     case find_rpc(Elems, ShortMethod) of
@@ -454,7 +454,7 @@ data_to_json([{Stmt, _, Key, Info} = Elem|T], Env, Data)
                 false ->
                     case req_mandatory(Stmt, Info) of
                         true ->
-                            error({invalid_params,
+                            erlang:error({invalid_params,
                                    {required, [Key|
                                                also_missing(T, Env, Data)]}});
                         false ->
@@ -472,7 +472,7 @@ data_to_json({Stmt, _, Key, _} = Elem, Env, {Key1, Data})
         true ->
             data_to_json_(Elem, Env, Data);
         false ->
-            error({invalid_params, {required, [Key]}})
+            erlang:error({invalid_params, {required, [Key]}})
     end;
 data_to_json([_|T], Env, Data) ->
     data_to_json(T, Env, Data);
@@ -499,7 +499,7 @@ data_to_json_({Stmt, _, Key, Info}, Env, Data)
                 {array, D} when is_list(D) -> D;
                 D when is_list(D) -> D;
                 _ ->
-                    error({invalid_params, {type_error, [Key, Stmt, Data]}})
+                    erlang:error({invalid_params, {type_error, [Key, Stmt, Data]}})
             end,
     if Stmt=='leaf-list' ->
             Type = get_type(Info),
@@ -512,7 +512,7 @@ data_to_json_({Stmt, _, Key, Info}, Env, Data)
                         (L) when is_list(L) ->
                              {struct, data_to_json(Info, Env, L)};
                         (Other) ->
-                             error({invalid_params,
+                             erlang:error({invalid_params,
                                     [{type_error,[Key,Info,Other]}]})
                      end, Data1)}}
     end.
@@ -547,7 +547,7 @@ imports(Data, {_Dir,Ext,Opts}) ->
 			  [ImpData] ->
 			      orddict:store(Pfx, ImpData, Acc);
 			  [] ->
-			      %% error({cannot_import, F, no_such_module})
+			      %% erlang:error({cannot_import, F, no_such_module})
 			      io:fwrite("ERROR: cannot_import ~s (~p)~n",
 					[F, no_such_module]),
 			      Acc
@@ -581,16 +581,16 @@ augment([{augment, _, What, Items}|T], Imports) ->
 					Pfx)}
 				     | augment(T, Imports)];
 				_ ->
-				    error({cannot_augment, What})
+				    erlang:error({cannot_augment, What})
 			    end;
 			[] ->
-			    error({augment_not_found, What})
+			    erlang:error({augment_not_found, What})
 		    end;
 		_ ->
-		    error({unfamiliar_augment, What})
+		    erlang:error({unfamiliar_augment, What})
 	    end;
 	_ ->
-	    error({unfamiliar_augment, What})
+	    erlang:error({unfamiliar_augment, What})
     end;
 augment([H|T], Imports) ->
     [H|augment(T, Imports)];
